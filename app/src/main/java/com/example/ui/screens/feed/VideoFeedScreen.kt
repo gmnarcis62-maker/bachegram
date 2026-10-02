@@ -6,14 +6,9 @@ import android.view.ViewGroup
 import android.view.WindowManager
 import android.widget.FrameLayout
 import androidx.annotation.OptIn
-import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.spring
-import androidx.compose.animation.fadeIn
-import androidx.compose.animation.fadeOut
-import androidx.compose.animation.scaleIn
-import androidx.compose.animation.scaleOut
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectTapGestures
@@ -74,7 +69,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.scale
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.pointer.pointerInput
@@ -326,7 +320,7 @@ fun VideoFeedScreen(
         }
     }
 
-    // ============ DIALOGS (unchanged) ============
+    // ============ DIALOGS ============
 
     showCellularWarningDialog?.let { targetVideo ->
         val approxMB = (viewModel.downloadManager.getEstimatedSizeBytes(targetVideo.duration) / (1024.0 * 1024.0))
@@ -568,7 +562,6 @@ fun VideoPageItem(
                             .inflate(com.example.R.layout.player_view_texture, null, false) as PlayerView
                         view.apply {
                             useController = false
-                            // ⭐ KEY FIX: FIT so the whole video is visible, no zoom
                             resizeMode = AspectRatioFrameLayout.RESIZE_MODE_FIT
                             setShutterBackgroundColor(android.graphics.Color.BLACK)
                             player = playerManager.getPlayer()
@@ -579,7 +572,6 @@ fun VideoPageItem(
                         }
                     },
                     update = { view ->
-                        // Re-assert FIT on every update (in case XML or lifecycle overrode it)
                         view.resizeMode = AspectRatioFrameLayout.RESIZE_MODE_FIT
                         view.player = if (isCurrentPage) playerManager.getPlayer() else null
                     },
@@ -590,12 +582,7 @@ fun VideoPageItem(
             }
 
             // ---- Ephemeral feedback: heart on double tap ----
-            AnimatedVisibility(
-                visible = showBigHeart,
-                enter = scaleIn() + fadeIn(),
-                exit = scaleOut() + fadeOut(),
-                modifier = Modifier.align(Alignment.Center)
-            ) {
+            if (showBigHeart) {
                 Icon(
                     imageVector = Icons.Filled.Favorite,
                     contentDescription = null,
@@ -603,21 +590,18 @@ fun VideoPageItem(
                     modifier = Modifier
                         .size(100.dp)
                         .scale(heartScale.value)
+                        .align(Alignment.Center)
                 )
             }
 
             // ---- Ephemeral feedback: play / pause on tap ----
-            AnimatedVisibility(
-                visible = showPlayPauseIcon,
-                enter = fadeIn(),
-                exit = fadeOut(),
-                modifier = Modifier.align(Alignment.Center)
-            ) {
+            if (showPlayPauseIcon) {
                 Box(
                     modifier = Modifier
                         .size(72.dp)
                         .clip(CircleShape)
-                        .background(Color.Black.copy(alpha = 0.55f)),
+                        .background(Color.Black.copy(alpha = 0.55f))
+                        .align(Alignment.Center),
                     contentAlignment = Alignment.Center
                 ) {
                     Icon(
@@ -711,7 +695,6 @@ fun VideoPageItem(
                     }
                 }
             } else if (hasError != null && isCurrentPage) {
-                // ---- Contextual: real error ----
                 Column(
                     modifier = Modifier
                         .align(Alignment.Center)
@@ -840,7 +823,7 @@ fun VideoPageItem(
                 maxLines = if (isDescriptionExpanded) 3 else 2
             )
 
-            // ---- Description (tap to expand) ----
+            // ---- Description ----
             if (video.description.isNotBlank()) {
                 Spacer(modifier = Modifier.height(4.dp))
                 Text(
@@ -943,7 +926,7 @@ fun VideoPageItem(
                 )
             }
 
-            // ---- Small diagnostic link (not on video) ----
+            // ---- Small diagnostic link ----
             Spacer(modifier = Modifier.height(4.dp))
             Text(
                 text = "🧪 تست و عیب‌یابی پخش",
@@ -957,7 +940,7 @@ fun VideoPageItem(
         }
     }
 
-    // ============ Diagnostic dialog (unchanged logic) ============
+    // ============ Diagnostic dialog ============
     if (showDiagnosticDialog) {
         var isRunningHttpTest by remember { mutableStateOf(false) }
         var testStatusResult by remember { mutableStateOf<String?>(null) }
@@ -1117,7 +1100,6 @@ fun VideoPageItem(
 
 /**
  * Small action button used in the horizontal bottom row.
- * Optionally shows a circular download-progress ring over the icon.
  */
 @Composable
 private fun FeedActionButton(
