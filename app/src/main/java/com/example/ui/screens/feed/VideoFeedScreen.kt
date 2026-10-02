@@ -1,3 +1,7 @@
+@file:OptIn(
+    androidx.compose.material3.ExperimentalMaterial3Api::class,
+    androidx.media3.common.util.UnstableApi::class
+)
 package com.example.ui.screens.feed
 
 import android.app.Activity
@@ -42,7 +46,6 @@ import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.outlined.BookmarkBorder
 import androidx.compose.material.icons.outlined.FavoriteBorder
 import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.material3.rememberModalBottomSheetState
@@ -61,6 +64,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
@@ -69,9 +73,9 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
-import androidx.media3.common.util.UnstableApi
 import androidx.media3.ui.AspectRatioFrameLayout
 import androidx.media3.ui.PlayerView
+import com.example.data.model.CommentItem
 import com.example.data.model.VideoItem
 import com.example.player.Media3PlayerManager
 import com.example.ui.components.CommentsBottomSheet
@@ -87,7 +91,6 @@ private val IG_GRADIENT = listOf(
     Color(0xFF5B51D8)
 )
 
-@OptIn(UnstableApi::class, ExperimentalMaterial3Api::class)
 @Composable
 fun VideoFeedScreen(
     viewModel: VideoFeedViewModel,
@@ -98,6 +101,7 @@ fun VideoFeedScreen(
     val context = LocalContext.current
     val coroutineScope = rememberCoroutineScope()
     val videos by viewModel.videos.collectAsState()
+    val commentsMap by viewModel.commentsByVideo.collectAsState()
 
     DisposableEffect(Unit) {
         val window = (context as? Activity)?.window
@@ -154,6 +158,7 @@ fun VideoFeedScreen(
             if (video.id != lastPlayedVideoId) {
                 lastPlayedVideoId = video.id
                 viewModel.onPageChanged(pagerState.currentPage)
+                viewModel.ensureCommentsLoaded(video.id)
                 playerManager.playVideo(video)
             }
         }
@@ -185,14 +190,18 @@ fun VideoFeedScreen(
         ) { pageIndex ->
             val video = videos.getOrNull(pageIndex) ?: return@VerticalPager
             val isCurrentPage = pagerState.currentPage == pageIndex
+            val comments = commentsMap[video.id].orEmpty()
 
             ReelsPageItem(
                 video = video,
                 isCurrentPage = isCurrentPage,
                 playerManager = playerManager,
+                comments = comments,
                 onLike = { viewModel.likeVideo(video) },
                 onToggleFavorite = { viewModel.toggleFavorite(video) },
                 onToggleSaved = { viewModel.toggleSaved(video) },
+                onSubmitComment = { text -> viewModel.addComment(video.id, text) },
+                onToggleCommentLike = { commentId -> viewModel.toggleCommentLike(video.id, commentId) },
                 onShare = {
                     val intent = Intent(Intent.ACTION_SEND).apply {
                         type = "text/plain"
@@ -229,15 +238,17 @@ fun VideoFeedScreen(
     }
 }
 
-@OptIn(UnstableApi::class, ExperimentalMaterial3Api::class)
 @Composable
 private fun ReelsPageItem(
     video: VideoItem,
     isCurrentPage: Boolean,
     playerManager: Media3PlayerManager,
+    comments: List<CommentItem>,
     onLike: () -> Unit,
     onToggleFavorite: () -> Unit,
     onToggleSaved: () -> Unit,
+    onSubmitComment: (String) -> Unit,
+    onToggleCommentLike: (String) -> Unit,
     onShare: () -> Unit
 ) {
     val coroutineScope = rememberCoroutineScope()
@@ -466,8 +477,11 @@ private fun ReelsPageItem(
         if (showComments) {
             CommentsBottomSheet(
                 video = video,
+                comments = comments,
                 sheetState = sheetState,
-                onDismiss = { showComments = false }
+                onDismiss = { showComments = false },
+                onSubmitComment = onSubmitComment,
+                onToggleLike = { comment -> onToggleCommentLike(comment.id) }
             )
         }
     }
@@ -475,7 +489,7 @@ private fun ReelsPageItem(
 
 @Composable
 private fun ReelsActionButton(
-    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    icon: ImageVector,
     label: String,
     tint: Color = Color.White,
     onClick: () -> Unit
