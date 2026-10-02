@@ -62,6 +62,21 @@ android {
   }
 }
 
+// Global opt-ins for experimental Compose Material3, Media3 UnstableApi,
+// and other opt-in-required APIs used across the app.
+// This removes the need for @OptIn / @file:OptIn in every source file.
+kotlin {
+  compilerOptions {
+    freeCompilerArgs.addAll(
+      "-opt-in=androidx.compose.material3.ExperimentalMaterial3Api",
+      "-opt-in=androidx.media3.common.util.UnstableApi",
+      "-opt-in=androidx.compose.foundation.ExperimentalFoundationApi",
+      "-opt-in=androidx.compose.animation.ExperimentalAnimationApi",
+      "-opt-in=androidx.compose.ui.ExperimentalComposeUiApi"
+    )
+  }
+}
+
 // Configure the Secrets Gradle Plugin to use .env and .env.example files
 // to match the convention used in Web projects.
 secrets {
