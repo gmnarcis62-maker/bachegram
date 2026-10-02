@@ -9,7 +9,6 @@ import android.content.Intent
 import android.view.ViewGroup
 import android.view.WindowManager
 import android.widget.FrameLayout
-import androidx.annotation.OptIn
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.spring
@@ -100,7 +99,9 @@ fun VideoFeedScreen(
 ) {
     val context = LocalContext.current
     val coroutineScope = rememberCoroutineScope()
-    val videos by viewModel.videos.collectAsState()
+
+    // Reels uses the shuffled list — a new random order is created on every app launch.
+    val videos by viewModel.shuffledVideos.collectAsState()
     val commentsMap by viewModel.commentsByVideo.collectAsState()
 
     DisposableEffect(Unit) {
@@ -164,12 +165,18 @@ fun VideoFeedScreen(
         }
     }
 
+    // When a video ends:
+    //   - if not at the end, go to next video
+    //   - if at the end, reshuffle the list and start over from index 0
     playerManager.onVideoEnded = {
         coroutineScope.launch {
-            if (pagerState.currentPage < videos.size - 1) {
+            val total = viewModel.shuffledVideos.value.size
+            if (total <= 0) return@launch
+            if (pagerState.currentPage < total - 1) {
                 pagerState.animateScrollToPage(pagerState.currentPage + 1)
             } else {
-                pagerState.animateScrollToPage(0)
+                viewModel.reshuffleAndRestart()
+                pagerState.scrollToPage(0)
             }
         }
     }

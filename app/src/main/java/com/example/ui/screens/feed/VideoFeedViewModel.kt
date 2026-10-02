@@ -24,12 +24,18 @@ class VideoFeedViewModel(application: Application) : AndroidViewModel(applicatio
     val networkSettingsManager = NetworkSettingsManager(application)
     val networkHelper = NetworkHelper(application)
 
+    // ---------- Original (chronological) list ----------
     val videos: StateFlow<List<VideoItem>> = repository.getAllVideos()
         .stateIn(
             scope = viewModelScope,
             started = SharingStarted.WhileSubscribed(5000),
             initialValue = emptyList()
         )
+
+    // ---------- Shuffled list (used by Reels / VideoFeedScreen) ----------
+    // New ViewModel = new shuffle on every app launch.
+    private val _shuffledVideos = MutableStateFlow<List<VideoItem>>(emptyList())
+    val shuffledVideos: StateFlow<List<VideoItem>> = _shuffledVideos.asStateFlow()
 
     val downloadedVideos: StateFlow<List<VideoItem>> = repository.getDownloadedVideos()
         .stateIn(
@@ -54,11 +60,31 @@ class VideoFeedViewModel(application: Application) : AndroidViewModel(applicatio
         viewModelScope.launch {
             repository.seedDatabaseIfNeeded()
         }
+        // When the source list first arrives, create a shuffled snapshot.
+        // This keeps a stable shuffled order for the whole session.
+        viewModelScope.launch {
+            videos.collect { list ->
+                if (list.isNotEmpty() && _shuffledVideos.value.isEmpty()) {
+                    _shuffledVideos.value = list.shuffled()
+                }
+            }
+        }
+    }
+
+    /**
+     * Re-shuffles the list and returns to the first item.
+     * Called when the user has viewed every video in the current shuffled cycle.
+     */
+    fun reshuffleAndRestart() {
+        val source = videos.value
+        if (source.isEmpty()) return
+        _shuffledVideos.value = source.shuffled()
+        _currentIndex.value = 0
     }
 
     fun onPageChanged(index: Int) {
         _currentIndex.value = index
-        val currentList = videos.value
+        val currentList = _shuffledVideos.value.ifEmpty { videos.value }
         if (index in currentList.indices) {
             viewModelScope.launch {
                 repository.recordWatch(currentList[index].id)
@@ -103,10 +129,22 @@ class VideoFeedViewModel(application: Application) : AndroidViewModel(applicatio
         _selectedCategoryFilter.value = category
     }
 
+    /**
+     * Selects a video from anywhere in the app (Home feed, Search, Profile grid).
+     * Resolves the correct index in the shuffled list first, so Reels opens the
+     * right video regardless of the original order.
+     */
     fun selectVideo(video: VideoItem) {
-        val index = videos.value.indexOfFirst { it.id == video.id }
-        if (index >= 0) {
-            _currentIndex.value = index
+        // Prefer the shuffled list (used by Reels)
+        val shuffledIndex = _shuffledVideos.value.indexOfFirst { it.id == video.id }
+        if (shuffledIndex >= 0) {
+            _currentIndex.value = shuffledIndex
+            return
+        }
+        // Fallback: original list
+        val originalIndex = videos.value.indexOfFirst { it.id == video.id }
+        if (originalIndex >= 0) {
+            _currentIndex.value = originalIndex
         }
     }
 
