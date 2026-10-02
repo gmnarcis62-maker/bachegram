@@ -8,29 +8,26 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.grid.GridCells
+import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
+import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.DeleteOutline
-import androidx.compose.material.icons.filled.OfflinePin
-import androidx.compose.material.icons.filled.PlayCircleFilled
-import androidx.compose.material3.Button
-import androidx.compose.material3.ButtonDefaults
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.Bookmark
+import androidx.compose.material.icons.filled.Download
+import androidx.compose.material.icons.filled.Favorite
+import androidx.compose.material.icons.filled.History
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.ScrollableTabRow
-import androidx.compose.material3.Surface
 import androidx.compose.material3.Tab
+import androidx.compose.material3.TabRow
 import androidx.compose.material3.TabRowDefaults
 import androidx.compose.material3.TabRowDefaults.tabIndicatorOffset
 import androidx.compose.material3.Text
@@ -43,26 +40,28 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import coil.compose.AsyncImage
+import coil.request.ImageRequest
+import coil.request.videoFrameMillis
 import com.example.data.model.VideoItem
-import com.example.ui.components.BachegramTopBar
-import com.example.ui.components.PersianUtils
-import com.example.ui.screens.categories.CategoryVideoItemCard
 import com.example.ui.screens.feed.VideoFeedViewModel
-import com.example.ui.theme.BadgeGreen
-import com.example.ui.theme.PrimaryOrange
-import com.example.ui.theme.SecondaryTurquoise
 
-enum class SavedTab(val title: String) {
-    FAVORITES("❤️ علاقه‌مندی‌ها"),
-    BOOKMARKS("🔖 ذخیره‌شده‌ها"),
-    OFFLINE_DOWNLOADS("💾 دانلودهای آفلاین"),
-    HISTORY("🕒 تاریخچه تماشا")
+private val IG_TEXT = Color(0xFF000000)
+private val IG_GRAY = Color(0xFF8E8E8E)
+private val IG_BORDER = Color(0xFFDBDBDB)
+
+private enum class SavedCategory(val label: String) {
+    FAVORITES("پسندیده‌ها"),
+    BOOKMARKS("ذخیره‌شده‌ها"),
+    DOWNLOADS("دانلودها"),
+    HISTORY("بازدیدها")
 }
 
 @Composable
@@ -70,116 +69,130 @@ fun SavedScreen(
     viewModel: VideoFeedViewModel,
     onVideoSelected: (VideoItem) -> Unit,
     onGoToFeed: () -> Unit = {},
+    onBack: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     val allVideos by viewModel.videos.collectAsState()
-    var selectedTab by remember { mutableStateOf(SavedTab.FAVORITES) }
+    var selectedCategory by remember { mutableStateOf(SavedCategory.FAVORITES) }
 
-    val displayedVideos = when (selectedTab) {
-        SavedTab.FAVORITES -> allVideos.filter { it.isFavorite }
-        SavedTab.BOOKMARKS -> allVideos.filter { it.isSaved }
-        SavedTab.OFFLINE_DOWNLOADS -> allVideos.filter { it.isDownloaded }
-        SavedTab.HISTORY -> allVideos.filter { it.watchCount > 0 }
+    val displayedVideos = when (selectedCategory) {
+        SavedCategory.FAVORITES -> allVideos.filter { it.isFavorite }
+        SavedCategory.BOOKMARKS -> allVideos.filter { it.isSaved }
+        SavedCategory.DOWNLOADS -> allVideos.filter { it.isDownloaded }
+        SavedCategory.HISTORY -> allVideos.filter { it.watchCount > 0 }
     }
 
     Column(
-        modifier = modifier
-            .fillMaxSize()
-            .background(MaterialTheme.colorScheme.background)
+        modifier = modifier.fillMaxSize().background(Color.White)
     ) {
-        BachegramTopBar(title = "صندوق من")
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 12.dp, vertical = 10.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Icon(
+                imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                contentDescription = "بازگشت",
+                tint = IG_TEXT,
+                modifier = Modifier
+                    .size(26.dp)
+                    .clickable { onBack() }
+            )
+            Spacer(Modifier.width(14.dp))
+            Text(
+                text = "ذخیره‌شده‌ها",
+                color = IG_TEXT,
+                fontSize = 18.sp,
+                fontWeight = FontWeight.Bold
+            )
+        }
 
-        // Scrollable Tab Row for all 4 tabs
-        ScrollableTabRow(
-            selectedTabIndex = selectedTab.ordinal,
-            containerColor = MaterialTheme.colorScheme.surface,
-            contentColor = PrimaryOrange,
-            edgePadding = 12.dp,
-            indicator = { tabPositions ->
+        TabRow(
+            selectedTabIndex = selectedCategory.ordinal,
+            containerColor = Color.White,
+            contentColor = IG_TEXT,
+            indicator = { positions ->
                 TabRowDefaults.SecondaryIndicator(
-                    Modifier.tabIndicatorOffset(tabPositions[selectedTab.ordinal]),
-                    color = PrimaryOrange,
-                    height = 3.dp
+                    Modifier.tabIndicatorOffset(positions[selectedCategory.ordinal]),
+                    color = IG_TEXT,
+                    height = 1.5.dp
                 )
             },
-            modifier = Modifier.fillMaxWidth()
+            divider = {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(0.5.dp)
+                        .background(IG_BORDER)
+                )
+            }
         ) {
-            SavedTab.values().forEach { tab ->
+            SavedCategory.values().forEach { cat ->
                 Tab(
-                    selected = selectedTab == tab,
-                    onClick = { selectedTab = tab },
+                    selected = selectedCategory == cat,
+                    onClick = { selectedCategory = cat },
                     text = {
                         Text(
-                            text = tab.title,
-                            style = MaterialTheme.typography.labelMedium.copy(
-                                fontWeight = if (selectedTab == tab) FontWeight.Bold else FontWeight.Normal,
-                                fontSize = 12.sp
-                            )
+                            text = cat.label,
+                            fontSize = 12.sp,
+                            fontWeight = if (selectedCategory == cat) FontWeight.Bold else FontWeight.Normal,
+                            color = if (selectedCategory == cat) IG_TEXT else IG_GRAY
                         )
                     },
-                    modifier = Modifier.testTag("tab_${tab.name}")
+                    icon = {
+                        Icon(
+                            imageVector = when (cat) {
+                                SavedCategory.FAVORITES -> Icons.Filled.Favorite
+                                SavedCategory.BOOKMARKS -> Icons.Filled.Bookmark
+                                SavedCategory.DOWNLOADS -> Icons.Filled.Download
+                                SavedCategory.HISTORY -> Icons.Filled.History
+                            },
+                            contentDescription = cat.label,
+                            tint = if (selectedCategory == cat) IG_TEXT else IG_GRAY,
+                            modifier = Modifier.size(18.dp)
+                        )
+                    }
                 )
             }
         }
 
         if (displayedVideos.isEmpty()) {
             Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(32.dp),
+                modifier = Modifier.fillMaxSize().padding(32.dp),
                 contentAlignment = Alignment.Center
             ) {
-                Column(
-                    horizontalAlignment = Alignment.CenterHorizontally,
-                    verticalArrangement = Arrangement.spacedBy(12.dp)
-                ) {
-                    Text(
-                        text = when (selectedTab) {
-                            SavedTab.FAVORITES -> "هنوز ویدیویی را پسند نکرده‌اید ❤️"
-                            SavedTab.BOOKMARKS -> "ویدیویی ذخیره نکرده‌اید 🔖"
-                            SavedTab.OFFLINE_DOWNLOADS -> "هنوز ویدیویی برای تماشای آفلاین دانلود نشده است 💾"
-                            SavedTab.HISTORY -> "هنوز ویدیویی تماشا نکرده‌اید 🕒"
-                        },
-                        style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
-                        color = MaterialTheme.colorScheme.onBackground
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    Icon(
+                        imageVector = Icons.Filled.Bookmark,
+                        contentDescription = null,
+                        tint = IG_GRAY,
+                        modifier = Modifier.size(64.dp)
                     )
+                    Spacer(Modifier.height(12.dp))
                     Text(
-                        text = when (selectedTab) {
-                            SavedTab.OFFLINE_DOWNLOADS -> "در صفحه اصلی ویدیو، روی دکمه دانلود (📥) بزنید تا ویدیو در حافظه ذخیره و بدون نیاز به اینترنت قابل پخش شود."
-                            else -> "با تماشای ویدیوها در خانه و دو بار ضربه روی تصویر، آنها را در این بخش نگه دارید."
+                        text = when (selectedCategory) {
+                            SavedCategory.FAVORITES -> "هنوز چیزی نپسندیدی"
+                            SavedCategory.BOOKMARKS -> "هنوز چیزی ذخیره نکردی"
+                            SavedCategory.DOWNLOADS -> "هنوز چیزی دانلود نکردی"
+                            SavedCategory.HISTORY -> "هنوز چیزی ندیدی"
                         },
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                        color = IG_GRAY,
+                        fontSize = 14.sp,
+                        textAlign = TextAlign.Center
                     )
-                    Spacer(modifier = Modifier.height(8.dp))
-                    Button(
-                        onClick = onGoToFeed,
-                        colors = ButtonDefaults.buttonColors(containerColor = PrimaryOrange),
-                        shape = RoundedCornerShape(16.dp)
-                    ) {
-                        Text("تماشای ویدیوها")
-                    }
                 }
             }
         } else {
-            LazyColumn(
-                contentPadding = PaddingValues(16.dp),
-                verticalArrangement = Arrangement.spacedBy(10.dp),
+            LazyVerticalGrid(
+                columns = GridCells.Fixed(3),
+                contentPadding = PaddingValues(2.dp),
+                horizontalArrangement = Arrangement.spacedBy(2.dp),
+                verticalArrangement = Arrangement.spacedBy(2.dp),
                 modifier = Modifier.fillMaxSize()
             ) {
-                items(displayedVideos) { video ->
-                    if (selectedTab == SavedTab.OFFLINE_DOWNLOADS) {
-                        DownloadedVideoCard(
-                            video = video,
-                            onClick = { onVideoSelected(video) },
-                            onDelete = { viewModel.deleteDownloadedVideo(video.id) }
-                        )
-                    } else {
-                        CategoryVideoItemCard(
-                            video = video,
-                            onClick = { onVideoSelected(video) }
-                        )
-                    }
+                items(displayedVideos, key = { it.id }) { video ->
+                    SavedTile(video = video, onClick = { onVideoSelected(video) })
                 }
             }
         }
@@ -187,106 +200,56 @@ fun SavedScreen(
 }
 
 @Composable
-fun DownloadedVideoCard(
-    video: VideoItem,
-    onClick: () -> Unit,
-    onDelete: () -> Unit
-) {
-    val sizeMB = if (video.fileSizeBytes > 0) {
-        String.format("%.1f مگابایت", video.fileSizeBytes / (1024.0 * 1024.0))
-    } else {
-        "دانلود شده"
-    }
-
-    Card(
-        shape = RoundedCornerShape(18.dp),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
-        modifier = Modifier
-            .fillMaxWidth()
-            .clickable { onClick() }
-    ) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(12.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Box(
-                modifier = Modifier
-                    .size(64.dp)
-                    .clip(RoundedCornerShape(14.dp))
-                    .background(
-                        Brush.linearGradient(listOf(BadgeGreen, SecondaryTurquoise))
-                    ),
-                contentAlignment = Alignment.Center
-            ) {
-                Icon(
-                    imageVector = Icons.Default.PlayCircleFilled,
-                    contentDescription = "پخش آفلاین",
-                    tint = Color.White,
-                    modifier = Modifier.size(34.dp)
-                )
-            }
-
-            Spacer(modifier = Modifier.width(12.dp))
-
-            Column(modifier = Modifier.weight(1f)) {
-                Text(
-                    text = video.title,
-                    style = MaterialTheme.typography.titleSmall.copy(
-                        fontWeight = FontWeight.Bold,
-                        fontSize = 14.sp
-                    ),
-                    color = MaterialTheme.colorScheme.onSurface,
-                    maxLines = 1
-                )
-                Spacer(modifier = Modifier.height(4.dp))
-                Row(
-                    horizontalArrangement = Arrangement.spacedBy(6.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Surface(
-                        shape = RoundedCornerShape(8.dp),
-                        color = BadgeGreen.copy(alpha = 0.15f)
-                    ) {
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
-                        ) {
-                            Icon(
-                                imageVector = Icons.Default.OfflinePin,
-                                contentDescription = null,
-                                tint = BadgeGreen,
-                                modifier = Modifier.size(12.dp)
-                            )
-                            Spacer(modifier = Modifier.width(3.dp))
-                            Text(
-                                text = "آماده تماشای آفلاین",
-                                style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp, fontWeight = FontWeight.Bold),
-                                color = BadgeGreen
-                            )
-                        }
-                    }
-
-                    Text(
-                        text = PersianUtils.toPersianDigits(sizeMB),
-                        style = MaterialTheme.typography.labelSmall.copy(fontSize = 11.sp),
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                }
-            }
-
-            IconButton(
-                onClick = onDelete,
-                modifier = Modifier.size(38.dp)
-            ) {
-                Icon(
-                    imageVector = Icons.Default.DeleteOutline,
-                    contentDescription = "حذف از حافظه",
-                    tint = Color(0xFFE63946)
-                )
-            }
+private fun SavedTile(video: VideoItem, onClick: () -> Unit) {
+    val context = LocalContext.current
+    val imageSource: Any? = remember(video.thumbnailUrl, video.isDownloaded, video.localFilePath) {
+        when {
+            video.thumbnailUrl.isNotBlank() -> video.thumbnailUrl
+            video.isDownloaded && video.localFilePath != null -> video.localFilePath
+            else -> null
         }
     }
+
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .aspectRatio(1f)
+            .background(Color(0xFF111111))
+            .clip(RoundedCornerShape(2.dp))
+            .clickable(onClick = onClick),
+        contentAlignment = Alignment.Center
+    ) {
+        if (imageSource != null) {
+            AsyncImage(
+                model = ImageRequest.Builder(context)
+                    .data(imageSource)
+                    .apply {
+                        if (video.isDownloaded && video.localFilePath != null) {
+                            videoFrameMillis(1000L)
+                        }
+                    }
+                    .crossfade(true)
+                    .build(),
+                contentDescription = video.title,
+                contentScale = ContentScale.Crop,
+                modifier = Modifier.fillMaxSize()
+            )
+        } else {
+            Text(text = emojiForCategory(video.category), fontSize = 36.sp)
+        }
+    }
+}
+
+private fun emojiForCategory(category: String): String = when {
+    category.contains("نقاشی") -> "🎨"
+    category.contains("ریاضی") -> "🔢"
+    category.contains("قصه") || category.contains("داستان") -> "📚"
+    category.contains("علوم") -> "🔬"
+    category.contains("موسیقی") || category.contains("شعر") -> "🎵"
+    category.contains("زبان") -> "🇬🇧"
+    category.contains("ورزش") -> "🏃"
+    category.contains("طبیعت") -> "🌱"
+    category.contains("رباتیک") -> "🤖"
+    category.contains("مهارت") -> "🧼"
+    else -> "🎬"
 }

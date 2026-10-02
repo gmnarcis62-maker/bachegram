@@ -3,6 +3,7 @@ package com.example.ui.screens.feed
 import android.app.Application
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
+import com.example.data.model.CommentItem
 import com.example.data.model.VideoItem
 import com.example.data.repository.VideoRepository
 import com.example.data.settings.NetworkSettingsManager
@@ -44,6 +45,10 @@ class VideoFeedViewModel(application: Application) : AndroidViewModel(applicatio
 
     private val _selectedCategoryFilter = MutableStateFlow<String?>(null)
     val selectedCategoryFilter: StateFlow<String?> = _selectedCategoryFilter.asStateFlow()
+
+    // ---------- Comments state (in-memory) ----------
+    private val _commentsByVideo = MutableStateFlow<Map<String, List<CommentItem>>>(emptyMap())
+    val commentsByVideo: StateFlow<Map<String, List<CommentItem>>> = _commentsByVideo.asStateFlow()
 
     init {
         viewModelScope.launch {
@@ -104,6 +109,84 @@ class VideoFeedViewModel(application: Application) : AndroidViewModel(applicatio
             _currentIndex.value = index
         }
     }
+
+    // ---------- Comments API ----------
+
+    fun ensureCommentsLoaded(videoId: String) {
+        if (_commentsByVideo.value.containsKey(videoId)) return
+        _commentsByVideo.value = _commentsByVideo.value + (videoId to seedCommentsFor(videoId))
+    }
+
+    fun addComment(videoId: String, text: String) {
+        val clean = text.trim()
+        if (clean.isBlank()) return
+        val newComment = CommentItem(
+            id = "c_${System.currentTimeMillis()}",
+            videoId = videoId,
+            authorName = "من",
+            authorEmoji = "🌟",
+            text = clean,
+            likesCount = 0,
+            timeAgoLabel = "الان"
+        )
+        val current = _commentsByVideo.value[videoId].orEmpty()
+        _commentsByVideo.value = _commentsByVideo.value + (videoId to (listOf(newComment) + current))
+    }
+
+    fun toggleCommentLike(videoId: String, commentId: String) {
+        val list = _commentsByVideo.value[videoId].orEmpty()
+        val updated = list.map {
+            if (it.id == commentId) {
+                it.copy(
+                    isLiked = !it.isLiked,
+                    likesCount = if (it.isLiked) (it.likesCount - 1).coerceAtLeast(0) else it.likesCount + 1
+                )
+            } else it
+        }
+        _commentsByVideo.value = _commentsByVideo.value + (videoId to updated)
+    }
+
+    private fun seedCommentsFor(videoId: String): List<CommentItem> = listOf(
+        CommentItem(
+            id = "c_${videoId}_1",
+            videoId = videoId,
+            authorName = "مامانِ سارا",
+            authorEmoji = "🌸",
+            text = "دخترم عاشق این قسمت شد! مرسی از محتوای خوبتون ❤️",
+            likesCount = 24,
+            timeAgoLabel = "۲ ساعت"
+        ),
+        CommentItem(
+            id = "c_${videoId}_2",
+            videoId = videoId,
+            authorName = "بابای علی",
+            authorEmoji = "🚀",
+            text = "خیلی آموزنده بود. چند بار پشت سر هم دیدش!",
+            likesCount = 12,
+            timeAgoLabel = "۵ ساعت"
+        ),
+        CommentItem(
+            id = "c_${videoId}_3",
+            videoId = videoId,
+            authorName = "خاله نازنین",
+            authorEmoji = "🌷",
+            text = "کی قسمت بعدی میاد؟ 😍",
+            likesCount = 8,
+            timeAgoLabel = "دیروز"
+        ),
+        CommentItem(
+            id = "c_${videoId}_4",
+            videoId = videoId,
+            authorName = "بچه‌گرام",
+            authorEmoji = "⭐",
+            text = "ممنون از همراهی‌تون! قسمت بعدی هفته آینده منتشر می‌شه ✨",
+            likesCount = 47,
+            timeAgoLabel = "دیروز",
+            isFromCreator = true
+        )
+    )
+
+    // ---------- Admin ----------
 
     val allVideosForAdmin: StateFlow<List<VideoItem>> = repository.getAllVideosForAdmin()
         .stateIn(
@@ -171,7 +254,6 @@ class VideoFeedViewModel(application: Application) : AndroidViewModel(applicatio
         onResult: (Boolean, String) -> Unit
     ) {
         viewModelScope.launch {
-            // Step 1: Duplicate check
             val existing = allVideosForAdmin.value
             val duplicateError = com.example.validator.VideoLinkValidator.isDuplicate(videoUrl, title, existing)
             if (duplicateError != null) {
@@ -179,7 +261,6 @@ class VideoFeedViewModel(application: Application) : AndroidViewModel(applicatio
                 return@launch
             }
 
-            // Step 2: Real HTTP & MimeType health validation
             val validation = com.example.validator.VideoLinkValidator.validateVideoUrl(videoUrl)
             when (validation) {
                 is com.example.validator.ValidationResult.Failed -> {
@@ -205,8 +286,68 @@ class VideoFeedViewModel(application: Application) : AndroidViewModel(applicatio
                         videoStatus = com.example.data.model.VideoStatus.VERIFIED.name
                     )
                     repository.addVerifiedVideo(newVideo)
-                    onResult(true, "ویدیوی جدید پس از بررسی سلامت و تأیید فنی با موفقیت اضافه شد! ✅")
+                    onResult(true, "ویدیوی جدید با موفقیت اضافه شد! ✅")
                 }
+            }
+        }
+    }
+
+    fun addLocalPost(
+        uri: android.net.Uri,
+        caption: String,
+        onResult: (Boolean, String) -> Unit
+    ) {
+        viewModelScope.launch {
+            try {
+                val app = getApplication<Application>()
+                val targetDir = java.io.File(app.filesDir, "local_posts").apply { mkdirs() }
+                val targetFile = java.io.File(targetDir, "post_${System.currentTimeMillis()}.mp4")
+
+                app.contentResolver.openInputStream(uri)?.use { input ->
+                    targetFile.outputStream().use { output ->
+                        input.copyTo(output)
+                    }
+                } ?: run {
+                    onResult(false, "امکان خواندن فایل انتخاب‌شده وجود ندارد")
+                    return@launch
+                }
+
+                if (!targetFile.exists() || targetFile.length() == 0L) {
+                    onResult(false, "فایل کپی‌شده خالی است")
+                    return@launch
+                }
+
+                val newVideo = VideoItem(
+                    id = "local_${System.currentTimeMillis()}",
+                    title = if (caption.isBlank()) "پست من" else caption.trim(),
+                    description = caption.trim(),
+                    category = "🎨 پست من",
+                    subCategory = "پست محلی",
+                    ageMin = 4,
+                    ageMax = 10,
+                    thumbnailUrl = "",
+                    videoUrl = targetFile.absolutePath,
+                    duration = 0,
+                    language = "fa",
+                    sourceName = "bachegram_kid",
+                    sourceUrl = "",
+                    isDirectMedia = true,
+                    isVerified = true,
+                    isFavorite = false,
+                    isSaved = true,
+                    likesCount = 0,
+                    watchCount = 0,
+                    createdAt = System.currentTimeMillis(),
+                    localFilePath = targetFile.absolutePath,
+                    isDownloaded = true,
+                    fileSizeBytes = targetFile.length(),
+                    videoStatus = com.example.data.model.VideoStatus.VERIFIED.name
+                )
+
+                repository.addVerifiedVideo(newVideo)
+                onResult(true, "پست با موفقیت ساخته شد")
+            } catch (e: Exception) {
+                onResult(false, "خطا: ${e.message}")
             }
         }
     }
