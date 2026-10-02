@@ -40,7 +40,6 @@ import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.outlined.BookmarkBorder
 import androidx.compose.material.icons.outlined.FavoriteBorder
-import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.Text
@@ -72,7 +71,6 @@ import androidx.compose.ui.viewinterop.AndroidView
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
-import androidx.media3.common.util.UnstableApi
 import androidx.media3.ui.AspectRatioFrameLayout
 import androidx.media3.ui.PlayerView
 import coil.compose.AsyncImage
@@ -102,7 +100,6 @@ private val IG_GRADIENT = listOf(
     Color(0xFF5B51D8)
 )
 
-@OptIn(UnstableApi::class, ExperimentalMaterial3Api::class)
 @Composable
 fun HomeFeedScreen(
     viewModel: VideoFeedViewModel,
@@ -311,7 +308,6 @@ private fun InstagramStoriesRow(videos: List<VideoItem>) {
     }
 }
 
-@OptIn(UnstableApi::class)
 @Composable
 fun InstagramPostCard(
     video: VideoItem,
